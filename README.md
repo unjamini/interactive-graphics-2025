@@ -10,3 +10,5 @@ This repository contains homework assignments for the **Interactive Graphics** c
 
 3. **project3**: 3D triangular mesh rendering with a texture using WebGL
 
+3. **project4**: 3D triangular mesh rendering with a texture using WebGL with shading
+
