@@ -821,6 +821,7 @@
         showBox = document.getElementById('show-box');
         InitWebGL();
         lightView = new LightView();
+        massSpring = new MassSpring();
         canvas.zoom = function( s ) {
             transZ *= s/canvas.height + 1;
             UpdateViewMatrices();
