@@ -6,8 +6,9 @@ import { treeVertexShader, treeFragmentShader } from './shaders/tree.js';
 import { firefliesVertexShader, firefliesFragmentShader } from './shaders/fireflies.js';
 import { groundVertexShader, groundFragmentShader } from './shaders/main.js';
 
-const NUM_FIREFLIES = 50;
+let NUM_FIREFLIES = 50;
 const NUM_TREES = 50;
+let FIREFLY_LIGHT_RADIUS = 1.0;
 
 let treeBuffers = null;
 let treeLoaded = false;
@@ -84,38 +85,42 @@ function InitPrograms() {
     groundProgram = InitShaderProgram(gl, groundVertexShader, groundFragmentShader);
 }
 
-// done
 function LoadTreeDataToBuffers() {
-    loadTreeData().then(({ positionBuffer, normalBuffer, texCoordBuffer, indexBuffer, materials }) => {
+    loadTreeData().then(({ materialBuffers, materials }) => {
         treeMaterials = materials;
-
-        const position = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, position);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positionBuffer), gl.STATIC_DRAW);
-    
-        const normal = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, normal);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normalBuffer), gl.STATIC_DRAW);
-    
-        const texCoord = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, texCoord);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoordBuffer), gl.STATIC_DRAW);
-    
-        const indices = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexBuffer), gl.STATIC_DRAW);
-    
-        treeBuffers = {
-            position: position,
-            normal: normal,
-            texCoord: texCoord,
-            indices: indices,
-            indexCount: indexBuffer.length,
-        };
+        
+        treeBuffers = {};
+        
+        for (const materialName in materialBuffers) {
+            const bufferData = materialBuffers[materialName];
+            
+            const position = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, position);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData.positionBuffer), gl.STATIC_DRAW);
+        
+            const normal = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, normal);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData.normalBuffer), gl.STATIC_DRAW);
+        
+            const texCoord = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, texCoord);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData.texCoordBuffer), gl.STATIC_DRAW);
+        
+            const indices = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(bufferData.indexBuffer), gl.STATIC_DRAW);
+        
+            treeBuffers[materialName] = {
+                position: position,
+                normal: normal,
+                texCoord: texCoord,
+                indices: indices,
+                indexCount: bufferData.indexBuffer.length,
+            };
+        }
     });
 }
 
-// done
 function LoadMaterialsAndCreateBuffers() {
     LoadTreeDataToBuffers();
 
@@ -157,9 +162,9 @@ function GenerateTrees() {
 // done
 function GenerateFireflies() {
     fireflies = Array.from({ length: NUM_FIREFLIES }, (_, __) => {
-        const centerX = (Math.random() - 0.5) * (groundSize - 5);
-        const centerZ = (Math.random() - 0.5) * (groundSize - 5);
-        const centerY = Math.random() * 3;
+        const centerX = (Math.random() - 0.5) * (groundSize - 2);
+        const centerZ = (Math.random() - 0.5) * (groundSize - 2);
+        const centerY = Math.random() * 2 - 1;
         
         return {
             x: centerX,
@@ -178,8 +183,33 @@ function GenerateFireflies() {
     });
 }
 
-// done
+
+function UpdateFireflyCount(newCount) {
+    NUM_FIREFLIES = newCount;
+    GenerateFireflies();
+    document.getElementById('firefly-count-value').textContent = newCount;
+}
+
+function UpdateLightRadius(newRadius) {
+    FIREFLY_LIGHT_RADIUS = newRadius;
+    document.getElementById('light-radius-value').textContent = newRadius.toFixed(1);
+}
+
 function AddEventListeners() {
+    const fireflySlider = document.getElementById('firefly-count');
+    
+    fireflySlider.addEventListener('input', (e) => {
+        const newCount = parseInt(e.target.value);
+        UpdateFireflyCount(newCount);
+    });
+
+    const lightRadiusSlider = document.getElementById('light-radius');
+    
+    lightRadiusSlider.addEventListener('input', (e) => {
+        const newRadius = parseFloat(e.target.value);
+        UpdateLightRadius(newRadius);
+    });
+
     // for moving camera on click
     canvas.addEventListener('mousedown', (e) => {
         isDragging = true;
@@ -264,13 +294,11 @@ function drawScene() {
     // fog uniforms for ground
     setFogUniforms(groundProgram);
     
-    // Bind floor texture if available
-    if (floorTexture) {
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, floorTexture);
-        const uGroundTexture = gl.getUniformLocation(groundProgram, 'uTexture');
-        gl.uniform1i(uGroundTexture, 0);
-    }
+    // add floor texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, floorTexture);
+    const uGroundTexture = gl.getUniformLocation(groundProgram, 'uTexture');
+    gl.uniform1i(uGroundTexture, 0);
     
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, groundIndexBuffer);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
@@ -296,10 +324,10 @@ function drawScene() {
         firefly.centerZ += Math.cos(firefly.time * 0.08) * 0.01;
         firefly.centerY += Math.sin(firefly.time * 0.05) * 0.01;
         
-        // keep fireflies within bounds
+        // keep fireflies in bounds
         firefly.centerX = Math.max(-groundSize / 2 + 1, Math.min(groundSize / 2 - 1, firefly.centerX));
         firefly.centerZ = Math.max(-groundSize / 2 + 1, Math.min(groundSize / 2 - 1, firefly.centerZ));
-        firefly.centerY = Math.max(0., Math.min(4, firefly.centerY));
+        firefly.centerY = Math.max(-1, Math.min(2, firefly.centerY));
 
         positions.push(firefly.x, firefly.y, firefly.z);
     }
@@ -317,70 +345,46 @@ function drawScene() {
     // fog uniforms for fireflies
     setFogUniforms(firefliesProgram);
 
-    gl.drawArrays(gl.POINTS, 0, NUM_FIREFLIES);
+    gl.drawArrays(gl.POINTS, 0, fireflies.length);
 
     // trees
     if (treeLoaded && treeBuffers && treeProgram && trees.length > 0) {
         gl.useProgram(treeProgram);
         
-        gl.bindBuffer(gl.ARRAY_BUFFER, treeBuffers.position);
-        const vertexPosition = gl.getAttribLocation(treeProgram, 'vertexPosition');
-        gl.enableVertexAttribArray(vertexPosition);
-        gl.vertexAttribPointer(vertexPosition, 3, gl.FLOAT, false, 0, 0);
-
-        
-        gl.bindBuffer(gl.ARRAY_BUFFER, treeBuffers.normal);
-        const vertexNormal = gl.getAttribLocation(treeProgram, 'vertexNormal');
-        gl.enableVertexAttribArray(vertexNormal);
-        gl.vertexAttribPointer(vertexNormal, 3, gl.FLOAT, false, 0, 0);
-        
-        gl.bindBuffer(gl.ARRAY_BUFFER, treeBuffers.texCoord);
-        const textureCoordinate = gl.getAttribLocation(treeProgram, 'textureCoordinate');
-        gl.enableVertexAttribArray(textureCoordinate);
-        gl.vertexAttribPointer(textureCoordinate, 2, gl.FLOAT, false, 0, 0);
-        
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, treeBuffers.indices);
-        
-        // Set up uniforms
         const viewProjectionMatrix = gl.getUniformLocation(treeProgram, 'viewProjectionMatrix');
         gl.uniformMatrix4fv(viewProjectionMatrix, false, projection);
-        
-        // TODO
-        const materialNames = Object.keys(treeMaterials);
-        const materialName = materialNames.length > 0 ? materialNames[0] : 'default';
-        console.log(materialName);
-        const material = treeMaterials[materialName] || { color: [0.2, 0.6, 0.2] };
-        
-        const materialColorUniform = gl.getUniformLocation(treeProgram, 'materialColor');
-        gl.uniform3fv(materialColorUniform, material.color);
-
-        // END TODO
 
         // firefly lighting
         const fireflyColorUniform = gl.getUniformLocation(treeProgram, 'fireflyColor');
         gl.uniform3f(fireflyColorUniform, 1.0, 0.8, 0.4); // yellow
         const fireflyRangeUniform = gl.getUniformLocation(treeProgram, 'fireflyRange');
-        gl.uniform1f(fireflyRangeUniform, 1.0);
+        gl.uniform1f(fireflyRangeUniform, FIREFLY_LIGHT_RADIUS);
         
         // firefly positions
         const fireflyPositionsUniform = gl.getUniformLocation(treeProgram, 'fireflyPositions');
         const numFirefliesUniform = gl.getUniformLocation(treeProgram, 'numFireflies');
         
-        // Create array of firefly positions
-        const fireflyPositionsArray = new Float32Array(NUM_FIREFLIES * 3); 
-        for (let i = 0; i < Math.min(fireflies.length, NUM_FIREFLIES); i++) {
+        const maxFirefliesForShader = Math.min(fireflies.length, 100);
+        const fireflyPositionsArray = new Float32Array(maxFirefliesForShader * 3); 
+        for (let i = 0; i < maxFirefliesForShader; i++) {
             fireflyPositionsArray[i * 3] = fireflies[i].x;
             fireflyPositionsArray[i * 3 + 1] = fireflies[i].y;
             fireflyPositionsArray[i * 3 + 2] = fireflies[i].z;
         }
         
         gl.uniform3fv(fireflyPositionsUniform, fireflyPositionsArray);
-        gl.uniform1i(numFirefliesUniform, Math.min(fireflies.length, NUM_FIREFLIES));
+        gl.uniform1i(numFirefliesUniform, maxFirefliesForShader);
         
-        // fog uniforms for trees
+        // fog for trees
         setFogUniforms(treeProgram);
-        
-        // trees
+
+        const vertexPosition = gl.getAttribLocation(treeProgram, 'vertexPosition');
+        const vertexNormal = gl.getAttribLocation(treeProgram, 'vertexNormal');
+        const textureCoordinate = gl.getAttribLocation(treeProgram, 'textureCoordinate');
+        const materialColorUniform = gl.getUniformLocation(treeProgram, 'materialColor');
+        const modelViewMatrix = gl.getUniformLocation(treeProgram, 'modelViewMatrix');
+        const normalMatrixUniform = gl.getUniformLocation(treeProgram, 'normalMatrix');
+
         for (let tree of trees) {
             const translationMatrix = CreateTranslationMatrix(tree.position[0], tree.position[1], tree.position[2]);
             const scaleMatrix = CreateScaleMatrix(tree.scale, tree.scale, tree.scale);
@@ -392,13 +396,30 @@ function drawScene() {
                 treeModelView[4], treeModelView[5], treeModelView[6],
                 treeModelView[8], treeModelView[9], treeModelView[10]
             ];
-            const modelViewMatrix = gl.getUniformLocation(treeProgram, 'modelViewMatrix');
+            
             gl.uniformMatrix4fv(modelViewMatrix, false, treeModelView);
-
-            const normalMatrixUniform = gl.getUniformLocation(treeProgram, 'normalMatrix');
             gl.uniformMatrix3fv(normalMatrixUniform, false, normalMatrix);
             
-            gl.drawElements(gl.TRIANGLES, treeBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
+            for (const materialName in treeBuffers) {
+                const buffers = treeBuffers[materialName];
+                const material = treeMaterials[materialName];
+                gl.uniform3fv(materialColorUniform, material.color);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
+                gl.enableVertexAttribArray(vertexPosition);
+                gl.vertexAttribPointer(vertexPosition, 3, gl.FLOAT, false, 0, 0);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffers.normal);
+                gl.enableVertexAttribArray(vertexNormal);
+                gl.vertexAttribPointer(vertexNormal, 3, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffers.texCoord);
+                gl.enableVertexAttribArray(textureCoordinate);
+                gl.vertexAttribPointer(textureCoordinate, 2, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.indices);
+                gl.drawElements(gl.TRIANGLES, buffers.indexCount, gl.UNSIGNED_SHORT, 0);
+            }
         }
     }
 

@@ -38,14 +38,9 @@ export function loadTreeData() {
                 
                 console.log(`material ${materialName} color:`, material.Kd);
             }
-        
-            const { positionBuffer, normalBuffer, texCoordBuffer, indexBuffer } = tree.getVertexBuffers();
-        
+            const materialBuffers = tree.getVertexBuffersByMaterial();        
             return {
-                positionBuffer: positionBuffer,
-                normalBuffer: normalBuffer, 
-                texCoordBuffer: texCoordBuffer,
-                indexBuffer: indexBuffer,
+                materialBuffers: materialBuffers,
                 materials: treeMaterials
             };
         });

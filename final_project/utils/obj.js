@@ -36,10 +36,6 @@ class ObjMesh
 					currentMaterial = parts[1];
 					this.materials[currentMaterial] = {
 						name: currentMaterial,
-						Ka: [0.2, 0.2, 0.2], // ambient
-						Kd: [0.8, 0.8, 0.8], // diffuse
-						Ks: [1.0, 1.0, 1.0], // specular
-						Ns: 32.0, // shininess
 					};
 					break;
 				case 'Kd':
@@ -221,19 +217,62 @@ class ObjMesh
 			indexBuffer: iBuffer
 		};
 	}
-	
-	// Get materials
+
 	getMaterials() {
 		return this.materials;
 	}
-	
-	// Get material for a specific face
+
 	getFaceMaterial(faceIndex) {
 		return this.faceMaterials[faceIndex];
 	}
 
 	getFaceMaterials() {
 		return this.faceMaterials;
+	}
+
+	getVertexBuffersByMaterial() {
+		const materialGroups = {};
+		for (const materialName in this.materials) {
+			materialGroups[materialName] = {
+				vBuffer: [],
+				tBuffer: [],
+				nBuffer: [],
+				iBuffer: [],
+				vertexCount: 0
+			};
+		}
+		for (let i = 0; i < this.face.length; i++) {
+			if (this.face[i].length < 3) continue;
+			
+			const materialName = this.faceMaterials[i];
+			const group = materialGroups[materialName];
+
+			// making everything triangular
+			this.addTriangleToBuffers(group.vBuffer, group.tBuffer, group.nBuffer, i, 0, 1, 2);
+			group.iBuffer.push(group.vertexCount, group.vertexCount + 1, group.vertexCount + 2);
+			group.vertexCount += 3;
+			for (let j = 3; j < this.face[i].length; j++) {
+				this.addTriangleToBuffers(group.vBuffer, group.tBuffer, group.nBuffer, i, 0, j-1, j);
+				group.iBuffer.push(group.vertexCount, group.vertexCount + 1, group.vertexCount + 2);
+				group.vertexCount += 3;
+			}
+		}
+		
+		const result = {};
+		for (const materialName in materialGroups) {
+			const group = materialGroups[materialName];
+			if (group.vBuffer.length > 0) {
+				result[materialName] = {
+					positionBuffer: group.vBuffer,
+					texCoordBuffer: group.tBuffer,
+					normalBuffer: group.nBuffer,
+					indexBuffer: group.iBuffer,
+					vertexCount: group.vertexCount
+				};
+			}
+		}
+		
+		return result;
 	}
 	
 }
