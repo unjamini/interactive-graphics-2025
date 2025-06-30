@@ -159,7 +159,6 @@ function GenerateTrees() {
     treeLoaded = true;
 }
 
-// done
 function GenerateFireflies() {
     fireflies = Array.from({ length: NUM_FIREFLIES }, (_, __) => {
         const centerX = (Math.random() - 0.5) * (groundSize - 2);
